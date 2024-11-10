@@ -83,3 +83,7 @@ def generate_image():
         return jsonify({'error': f"Erro ao fazer requisição HTTP: {str(e)}"}), 500
     except Exception as e:
         return jsonify({'error': f"Ocorreu um erro: {str(e)}"}), 500
+
+# Adicionando o app.run() novamente
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
