@@ -23,8 +23,8 @@ def compress_and_convert_image(image_data):
     return compressed_image_io
 
 
-@app.route('/generate-and-compress', methods=['POST'])
-def generate_and_compress():
+@app.route('/generate-image', methods=['POST'])
+def generate_image():
     """
     Endpoint que gera uma imagem com a Imagine API a partir de um prompt,
     comprime a imagem em formato WEBP e retorna o arquivo.
@@ -41,12 +41,13 @@ def generate_and_compress():
         headers = {
             "Authorization": f"Bearer {IMAGINE_API_BEARER}"
         }
+        # Ajustando para enviar os dados no formato multipart/form-data
         payload = {
-            "prompt": prompt,
-            "aspect_ratio": "16:9",
-            "style_id": 122
+            "prompt": (None, prompt),  # (campo, valor)
+            "aspect_ratio": (None, "16:9"),
+            "style_id": (None, "122")
         }
-        response = requests.post(IMAGINE_API_URL, headers=headers, data=payload)
+        response = requests.post(IMAGINE_API_URL, headers=headers, files=payload)
 
         if response.status_code != 200:
             return jsonify({'error': f"Erro na Imagine API: {response.text}"}), response.status_code
