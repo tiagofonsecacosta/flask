@@ -1,86 +1,98 @@
 import os
 import requests
 from flask import Flask, request, jsonify, send_file
-from PIL import Image
 from io import BytesIO
 
 app = Flask(__name__)
 
+# Configuração da Imagine API
 IMAGINE_API_URL = "https://api.vyro.ai/v1/imagine/api/generations"
 IMAGINE_API_BEARER = "vk-KmgntjQWQfnjTzbkQKViD0xY3bf0r478WVRwjv3tKzAaa"
-
-def compress_and_convert_image(image_data):
-    """
-    Comprime e converte a imagem para o formato WEBP.
-    """
-    image = Image.open(BytesIO(image_data))
-
-    # Crie um objeto BytesIO para salvar a imagem comprimida
-    compressed_image_io = BytesIO()
-    image.save(compressed_image_io, format="WEBP", quality=70, optimize=True)
-    compressed_image_io.seek(0)
-
-    return compressed_image_io
-
 
 @app.route('/generate-image', methods=['POST'])
 def generate_image():
     """
-    Endpoint que gera uma imagem com a Imagine API a partir de um prompt,
-    comprime a imagem em formato WEBP e retorna o arquivo.
+    Endpoint que gera uma imagem com a Imagine API a partir de um prompt e retorna a imagem em PNG.
     """
-    data = request.json
-    prompt = data.get('prompt')
-    filename = data.get('filename', 'compressed_image')  # Nome do arquivo opcional
-
-    if not prompt:
-        return jsonify({'error': 'O prompt é obrigatório.'}), 400
+    logs = []  # Lista para armazenar os logs
 
     try:
-        # 1. Fazer requisição para a Imagine API
+        # 1. Ler os dados da requisição
+        logs.append("Iniciando a leitura dos dados da requisição...")
+        data = request.json
+        prompt = data.get('prompt')
+        filename = data.get('filename', 'generated_image')  # Nome do arquivo padrão
+
+        if not prompt:
+            logs.append("Erro: O prompt é obrigatório!")
+            return jsonify({'error': 'O prompt é obrigatório.', 'logs': logs}), 400
+
+        # 2. Fazer a requisição para a Imagine API
+        logs.append(f"Preparando a requisição para a Imagine API com o prompt: {prompt}")
         headers = {
             "Authorization": f"Bearer {IMAGINE_API_BEARER}"
         }
-        # Ajustando para enviar os dados no formato multipart/form-data
         payload = {
-            "prompt": (None, prompt),  # (campo, valor)
+            "prompt": (None, prompt),  # Campos multipart/form-data
             "aspect_ratio": (None, "16:9"),
             "style_id": (None, "122")
         }
+
+        logs.append("Enviando requisição para a Imagine API...")
         response = requests.post(IMAGINE_API_URL, headers=headers, files=payload)
 
         if response.status_code != 200:
-            return jsonify({'error': f"Erro na Imagine API: {response.text}"}), response.status_code
+            logs.append(f"Erro na Imagine API. Status code: {response.status_code}. Resposta: {response.text}")
+            return jsonify({'error': f"Erro na Imagine API: {response.text}", 'logs': logs}), response.status_code
 
-        # Obter a URL da imagem gerada
+        logs.append("Requisição para a Imagine API foi bem-sucedida.")
+        
+        # 3. Obter a URL da imagem gerada
+        logs.append("Extraindo a URL da imagem gerada...")
         image_url = response.json().get("image_url")
         if not image_url:
-            return jsonify({'error': 'Não foi possível obter a URL da imagem gerada.'}), 500
+            logs.append("Erro: Não foi possível obter a URL da imagem gerada.")
+            return jsonify({'error': 'Não foi possível obter a URL da imagem gerada.', 'logs': logs}), 500
 
-        # 2. Fazer download da imagem gerada
+        logs.append(f"URL da imagem gerada: {image_url}")
+
+        # 4. Fazer download da imagem gerada
+        logs.append("Baixando a imagem gerada...")
         image_response = requests.get(image_url, stream=True)
-        image_response.raise_for_status()  # Verifica se houve algum erro na requisição
+
+        # Verifica se o download foi bem-sucedido
+        if image_response.status_code != 200:
+            logs.append(f"Erro ao baixar a imagem. Status code: {image_response.status_code}.")
+            return jsonify({'error': f"Erro ao baixar a imagem: {image_response.status_code}", 'logs': logs}), 500
+
+        # Verifica se o conteúdo da imagem está vazio
+        if not image_response.content or len(image_response.content) == 0:
+            logs.append("Erro: O conteúdo da imagem está vazio.")
+            return jsonify({'error': 'Erro: O conteúdo da imagem gerada está vazio.', 'logs': logs}), 500
+
+        logs.append("Download da imagem concluído com sucesso.")
         image_data = image_response.content
 
-        # 3. Comprimir e converter a imagem
-        compressed_image = compress_and_convert_image(image_data)
+        # 5. Preparar o nome do arquivo para o retorno
+        base_filename = os.path.splitext(filename)[0]  # Remove extensão existente, se houver
+        output_filename = f"{base_filename}.png"
 
-        # 4. Preparar o nome do arquivo para o retorno
-        base_filename = os.path.splitext(filename)[0]  # Remover extensão existente (se houver)
-        output_filename = f"{base_filename}.webp"
+        logs.append(f"Retornando a imagem gerada com o nome: {output_filename}")
 
-        # 5. Retornar a imagem comprimida
+        # 6. Retornar a imagem gerada
         return send_file(
-            compressed_image,
-            mimetype="image/webp",
+            BytesIO(image_data),
+            mimetype="image/png",
             download_name=output_filename,
             as_attachment=True
         )
 
     except requests.exceptions.RequestException as e:
-        return jsonify({'error': f"Erro ao baixar a imagem: {str(e)}"}), 500
+        logs.append(f"Erro ao fazer requisição HTTP: {str(e)}")
+        return jsonify({'error': f"Erro ao fazer requisição HTTP: {str(e)}", 'logs': logs}), 500
     except Exception as e:
-        return jsonify({'error': f"Ocorreu um erro: {str(e)}"}), 500
+        logs.append(f"Erro inesperado: {str(e)}")
+        return jsonify({'error': f"Ocorreu um erro: {str(e)}", 'logs': logs}), 500
 
 
 if __name__ == '__main__':
