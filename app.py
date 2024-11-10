@@ -41,45 +41,30 @@ def generate_image():
         logs.append("Enviando requisição para a Imagine API...")
         response = requests.post(IMAGINE_API_URL, headers=headers, files=payload)
 
+        # Verificar se a resposta foi bem-sucedida
         if response.status_code != 200:
             logs.append(f"Erro na Imagine API. Status code: {response.status_code}. Resposta: {response.text}")
             return jsonify({'error': f"Erro na Imagine API: {response.text}", 'logs': logs}), response.status_code
 
-        logs.append("Requisição para a Imagine API foi bem-sucedida.")
-        
-        # 3. Obter a URL da imagem gerada
-        logs.append("Extraindo a URL da imagem gerada...")
-        image_url = response.json().get("image_url")
-        if not image_url:
-            logs.append("Erro: Não foi possível obter a URL da imagem gerada.")
-            return jsonify({'error': 'Não foi possível obter a URL da imagem gerada.', 'logs': logs}), 500
+        logs.append("Requisição para a Imagine API foi bem-sucedida. Processando imagem...")
 
-        logs.append(f"URL da imagem gerada: {image_url}")
+        # 3. Obter a imagem diretamente do corpo da resposta
+        image_data = response.content
 
-        # 4. Fazer download da imagem gerada
-        logs.append("Baixando a imagem gerada...")
-        image_response = requests.get(image_url, stream=True)
-
-        # Verifica se o download foi bem-sucedido
-        if image_response.status_code != 200:
-            logs.append(f"Erro ao baixar a imagem. Status code: {image_response.status_code}.")
-            return jsonify({'error': f"Erro ao baixar a imagem: {image_response.status_code}", 'logs': logs}), 500
-
-        # Verifica se o conteúdo da imagem está vazio
-        if not image_response.content or len(image_response.content) == 0:
-            logs.append("Erro: O conteúdo da imagem está vazio.")
+        # Verificar se o conteúdo da imagem está vazio
+        if not image_data or len(image_data) == 0:
+            logs.append("Erro: O conteúdo da imagem gerada está vazio.")
             return jsonify({'error': 'Erro: O conteúdo da imagem gerada está vazio.', 'logs': logs}), 500
 
-        logs.append("Download da imagem concluído com sucesso.")
-        image_data = image_response.content
+        logs.append("Imagem gerada com sucesso pela Imagine API.")
 
-        # 5. Preparar o nome do arquivo para o retorno
+        # 4. Preparar o nome do arquivo para o retorno
         base_filename = os.path.splitext(filename)[0]  # Remove extensão existente, se houver
         output_filename = f"{base_filename}.png"
 
         logs.append(f"Retornando a imagem gerada com o nome: {output_filename}")
 
-        # 6. Retornar a imagem gerada
+        # 5. Retornar a imagem gerada
         return send_file(
             BytesIO(image_data),
             mimetype="image/png",
